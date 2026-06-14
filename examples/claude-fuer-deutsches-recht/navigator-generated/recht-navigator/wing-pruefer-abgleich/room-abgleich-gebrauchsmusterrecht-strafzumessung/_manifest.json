@@ -1,0 +1,16 @@
+{
+ "router_name": "room-abgleich-gebrauchsmusterrecht-strafzumessung",
+ "skills_dir": ".",
+ "created": "2026-06-14T15:50:39.665014+00:00",
+ "kind": "room",
+ "navigator": true,
+ "root": false,
+ "layout": "nested",
+ "skills": [
+  {
+   "name": "zone-abgleich-meinungspruefer-strafzumessung",
+   "folder_name": "recht-navigator/wing-pruefer-abgleich/room-abgleich-gebrauchsmusterrecht-strafzumessung/zone-abgleich-meinungspruefer-strafzumessung",
+   "description_at_merge": ""
+  }
+ ]
+}

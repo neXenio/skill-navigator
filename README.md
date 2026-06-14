@@ -1,22 +1,125 @@
 # skill-navigator
 
-Build a decision-tree navigator over a directory of `SKILL.md`-based skills.
-`skill-navigator` gives an agent one root entry skill, then guides it tier by
-tier until it reaches the right leaf skill.
+> One entry skill that routes an agent through a decision tree to the right
+> `SKILL.md`, so a skills folder of any size stays usable.
 
-Hierarchy: **Wing -> Room -> Zone -> Station -> leaf skill**. Each internal
-node is a decision node with a routing question, branch keyword hints, relative
-links to children, and `RELATES_TO` cross-links between related branches.
+**Languages:** [English](README.md) · [中文](README.zh.md)
+
+**Topics:** Claude Code skills · Agent Skills · `SKILL.md` router · skill overload
+· progressive disclosure · MCP tool overload · Codex plugins · skills directory
+
+## The problem: skill overload
+
+Agent Skills load by [progressive disclosure](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview):
+the agent sees only each skill's name and description (about 30-50 tokens) until
+it picks one, then reads the full `SKILL.md`. That works for a dozen skills. It
+falls apart at hundreds or thousands:
+
+- The always-on metadata list grows past the context budget on its own.
+- Description-only routing gets unreliable once many skills sound alike (ten
+  flavors of "review", forty of "Kündigung").
+- You cannot delete skills to reclaim context, because you still need them
+  reachable.
+
+You want every skill at hand *and* a small context. Those two goals pull against
+each other.
+
+## What skill-navigator does
+
+skill-navigator adds a second layer of progressive disclosure. It builds **one
+root skill** the agent enters, then routes tier by tier through a decision tree
+until it lands on the right leaf skill. The agent loads the root (about 30-50
+tokens) plus the handful of nodes on its path, never the whole catalog.
+
+Hierarchy: **Wing** (domain) → **Room** (sub-domain) → **Zone** (topic) →
+**Station** (~7 leaves) → **leaf skill**. Each internal node carries a routing
+question, branch keyword hints, relative links to its children, an *"Up one
+level"* backlink for backtracking, and `RELATES_TO` cross-links to near branches.
+
+Point it at 8 skills or 25,000. The root stays the only entry an agent has to
+discover. See the [German-law worked example](examples/claude-fuer-deutsches-recht/README.md)
+for a 25,000-skill corpus reduced to one navigable root.
 
 ## Features
 
 - Embeds each leaf skill from `folder-name + description`.
 - Clusters skills top-down with k-means into a bounded 4-tier tree.
+- Accepts nested skill *trees* (`--discover tree|flat`), not just flat dirs.
+- Rebalances so every node has **≥3 children** and every leaf-holder **≥3 leaves**
+  (no 1-child chains, no lonely leaves).
 - Emits JSON batches so an LLM workflow can label internal nodes.
-- Renders one decision-node `SKILL.md` plus `_manifest.json` per node.
+- Renders one decision-node `SKILL.md` plus `_manifest.json` per node, **flat or
+  nested on disk** (`--layout`; flat is marketplace-safe).
+- Adds an **"Up one level"** backlink so an agent backtracks when no branch fits.
 - Marks generated nodes with `"navigator": true`, so rebuilds replace
   navigator-owned directories.
 - Provides `walk`, `find`, and `stats` commands for verification.
+
+## How it works
+
+The pipeline runs build, label, render, then verify, looping until every leaf is
+reachable:
+
+```mermaid
+flowchart TD
+    A["skills dir: many SKILL.md"] --> B["build: embed + cluster + rebalance"]
+    B --> C["emit: label batches"]
+    C --> D["LLM labels nodes"]
+    D --> E["render --apply: write nodes + root"]
+    E --> F["relates: RELATES_TO cross-links"]
+    F --> G["stats / find / walk: verify"]
+    G --> H{"unreached == 0?"}
+    H -- yes --> I["done: one root skill"]
+    H -- no --> B
+```
+
+Flat routing forces one pick against the whole corpus; the navigator turns it
+into a few bounded hops:
+
+```mermaid
+flowchart LR
+    subgraph Before["Flat routing"]
+      direction TB
+      U1["request"] --> L1["N skill descriptions"]
+      L1 --> P1["pick 1 of N at once"]
+    end
+    subgraph After["Navigator"]
+      direction TB
+      U2["request"] --> R2["root"]
+      R2 --> W2["wing"]
+      W2 --> Z2["zone"]
+      Z2 --> S2["station"]
+      S2 --> Lf2["leaf skill"]
+    end
+```
+
+The 4-tier hierarchy, with data-driven cross-links between near branches:
+
+```mermaid
+graph TD
+    R["root navigator"] --> W["Wing: domain"]
+    W --> Rm["Room: sub-domain"]
+    Rm --> Z["Zone: topic cluster"]
+    Z --> St["Station: ~7 leaves"]
+    St --> Lf["leaf skill"]
+    R -. RELATES_TO .-> W2["Wing"]
+```
+
+Traversal is a state machine: descend on a match, **go back up** when no branch
+fits:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Root
+    Root --> Wing: pick branch
+    Wing --> Zone: pick branch
+    Zone --> Station: pick branch
+    Station --> Leaf: pick leaf
+    Wing --> Root: no branch fits (up)
+    Zone --> Wing: no branch fits (up)
+    Station --> Zone: no branch fits (up)
+    Leaf --> [*]
+```
 
 ## Requirements
 
@@ -116,6 +219,18 @@ Your skills directory now includes generated navigator folders, for example:
 
 In your agent, invoke `team-navigator`. The agent reads its branch list, follows
 the linked child `SKILL.md` files, and ends at the matching leaf skill.
+
+## Worked Example: German Law Skills
+
+[`examples/claude-fuer-deutsches-recht/`](examples/claude-fuer-deutsches-recht/README.md)
+runs the navigator over a large real-world corpus,
+[Klotzkette/claude-fuer-deutsches-recht](https://github.com/Klotzkette/claude-fuer-deutsches-recht)
+(~230 plugins / ~25,672 skills). It **references** the upstream skills (nothing
+is copied), shows the generated node structure, walks a traversal, and includes
+before/after diagrams plus token-safety and retrieval-effectiveness analysis.
+
+Thanks to [Klotzkette](https://github.com/Klotzkette) for that collection, which
+inspired the example.
 
 ## Install from a Clone
 

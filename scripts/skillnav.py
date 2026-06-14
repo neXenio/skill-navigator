@@ -39,7 +39,21 @@ def write_json(path, data, **kwargs):
 
 def desc_of(folder):
     p = f"{folder}/SKILL.md"
-    if not os.path.exists(p): return ""
+    if not os.path.exists(p):
+        # tree-as-leaf: the plugin dir may have no own SKILL.md. Fall back to its
+        # README, else the first nested SKILL.md, so the leaf still embeds well.
+        if os.path.exists(f"{folder}/README.md"):
+            txt = read_text(f"{folder}/README.md")
+            txt = re.sub(r'<!--.*?-->', ' ', txt, flags=re.S)      # drop HTML comments
+            txt = re.sub(r'^\s*#+\s*', '', txt, flags=re.M)        # drop markdown headers
+            txt = re.sub(r'[`*_>|\-]+', ' ', txt)                  # drop md punctuation
+            return re.sub(r'\s+', ' ', txt).strip()[:300]
+        for cur, dirs, files in os.walk(folder):
+            dirs[:] = [d for d in dirs if d != ".git"]
+            if "SKILL.md" in files:
+                p = os.path.join(cur, "SKILL.md"); break
+        else:
+            return ""
     t = read_text(p)
     m = re.search(r'description:\s*[>|]?\s*\n?(.*?)(?:\nuser-invokable:|\nargs:|\nmetadata:|\ndisable|\n---)', t, re.S)
     if not m:
@@ -50,17 +64,42 @@ def desc_of(folder):
 def is_leaf(d):
     return os.path.isdir(d) and os.path.exists(f"{d}/SKILL.md") and not os.path.exists(f"{d}/_manifest.json")
 
-def find_leaves(include, exclude):
+def _has_skill_anywhere(d):
+    for cur, dirs, files in os.walk(d):
+        dirs[:] = [x for x in dirs if x != ".git"]
+        if "SKILL.md" in files and not os.path.exists(os.path.join(cur, "_manifest.json")):
+            return True
+    return False
+
+def find_leaves(include, exclude, discover="top"):
+    # discover modes for trees of skills:
+    #   top  -> top-level dirs that directly contain SKILL.md (default, flat dirs)
+    #   tree -> each top-level dir that contains a SKILL.md anywhere = ONE leaf
+    #   flat -> every dir with SKILL.md at any depth = a leaf (id is its relpath)
     out = []
-    for d in sorted(os.listdir(".")):
-        if not is_leaf(d) or d.startswith("_"):
-            continue
-        if include and not any(fnmatch.fnmatch(d, g) for g in include):
-            continue
-        if exclude and any(fnmatch.fnmatch(d, g) for g in exclude):
-            continue
-        out.append(d)
-    return out
+    if discover == "flat":
+        for cur, dirs, files in os.walk("."):
+            dirs[:] = [x for x in dirs if x != ".git" and not x.startswith("_")]
+            if "SKILL.md" in files and not os.path.exists(os.path.join(cur, "_manifest.json")):
+                rel = os.path.relpath(cur, ".")
+                if rel != ".":
+                    out.append(rel)
+        out.sort()
+    else:
+        for d in sorted(os.listdir(".")):
+            if d.startswith("_") or not os.path.isdir(d):
+                continue
+            ok = is_leaf(d) if discover == "top" else _has_skill_anywhere(d)
+            if ok:
+                out.append(d)
+    def keep(p):
+        b = os.path.basename(p)
+        if include and not any(fnmatch.fnmatch(b, g) or fnmatch.fnmatch(p, g) for g in include):
+            return False
+        if exclude and any(fnmatch.fnmatch(b, g) or fnmatch.fnmatch(p, g) for g in exclude):
+            return False
+        return True
+    return [p for p in out if keep(p)]
 
 def slug(s):
     s = s.lower().replace("&", " und ").replace("§", "par").replace("/", "-")
@@ -73,24 +112,26 @@ LANG = {
  "de": {
    "level": {"wing":"Bereich","room":"Teilbereich","zone":"Themenzone","station":"Themenstation"},
    "node_title": "Entscheidungsknoten",
-   "frage": "## Frage\n\nWaehle den Unterbereich von «{title}», der zum Anliegen passt. Lade dessen SKILL.md und entscheide dort weiter, bis zu einem Einzelskill (Blatt).\n\n## Zweige",
-   "branch": "- **{lb}**: Stichworte: {hint} -> `../{t}/SKILL.md`",
-   "leaf_head": "## Einzelskills (Blaetter)\n\nWaehle das passende Einzelskill und lade dessen Anweisungen. Dies ist die unterste Navigationsebene.",
-   "leaf_branch": "- **{lb}**: {hint} -> `../{t}/SKILL.md`",
-   "unclear": "## Wenn unklar\n- Mehrere Zweige passen -> nenne die Kandidaten und frage den Nutzer.\n- Kein Zweig passt -> liste die Zweige und bitte um Praezisierung.",
+   "frage": "## Frage\n\nWaehle den passenden Unterbereich von «{title}». Lade dessen SKILL.md; weiter bis zum Blatt (Einzelskill).\n\n## Zweige",
+   "branch": "- **{lb}**: Stichworte: {hint} -> `{t}`",
+   "leaf_head": "## Einzelskills (Blaetter)\n\nWaehle das passende Einzelskill; lade dessen Anweisungen. Unterste Ebene.",
+   "leaf_branch": "- **{lb}**: {hint} -> `{t}`",
+   "unclear": "## Wenn unklar\n- Mehrere passen -> nenne Kandidaten, frage Nutzer.\n- Keiner passt -> gehe HOCH (Link «Eine Ebene hoeher») und nimm einen Nachbarzweig. Erst an der Wurzel den Nutzer um Praezisierung bitten.",
    "relates": "## Verwandte Bereiche (RELATES_TO)\n\nSemantisch nahe Bereiche in anderen Zweigen. Bei Grenzfaellen dort weitersuchen:",
-   "routes": "Routes requests to one of {n} sub-skills. Read the relevant sub-skill's full instructions before acting.",
+   "routes": "Leitet zu 1 von {n} Unterskills. Lies das gewaehlte Unterskill vollstaendig, bevor du handelst.",
+   "up": "## Eine Ebene hoeher\n\nPasst kein Zweig? Gehe zurueck zu: `{p}`",
  },
  "en": {
    "level": {"wing":"Area","room":"Sub-area","zone":"Topic zone","station":"Topic station"},
    "node_title": "Decision node",
-   "frage": "## Question\n\nPick the part of «{title}» that fits the request. Load its SKILL.md and continue until you reach a leaf skill.\n\n## Branches",
-   "branch": "- **{lb}**: keywords: {hint} -> `../{t}/SKILL.md`",
-   "leaf_head": "## Leaf skills\n\nPick the matching leaf skill and load its instructions.",
-   "leaf_branch": "- **{lb}**: {hint} -> `../{t}/SKILL.md`",
-   "unclear": "## If unclear\n- Several branches fit -> name the candidates and ask the user.\n- No branch fits -> list the branches and ask to narrow down.",
+   "frage": "## Question\n\nPick the part of «{title}» matching the request. Load its SKILL.md; continue to a leaf.\n\n## Branches",
+   "branch": "- **{lb}**: keywords: {hint} -> `{t}`",
+   "leaf_head": "## Leaf skills\n\nPick the matching leaf; load its instructions.",
+   "leaf_branch": "- **{lb}**: {hint} -> `{t}`",
+   "unclear": "## If unclear\n- Several fit -> name candidates, ask user.\n- None fit -> go UP (the «Up one level» link) and try a sibling. Only at the root, ask the user to narrow.",
    "relates": "## Related areas (RELATES_TO)\n\nClose areas in other branches. Follow them for borderline cases:",
-   "routes": "Routes requests to one of {n} sub-skills. Read the relevant sub-skill's full instructions before acting.",
+   "routes": "Route to 1 of {n} sub-skills. Read the chosen one fully before acting.",
+   "up": "## Up one level\n\nNo branch fits? Go back to: `{p}`",
  },
 }
 
@@ -105,19 +146,19 @@ def cmd_build(a):
     os.makedirs(a.work, exist_ok=True)
     include = [g for g in (a.include or "").split(",") if g]
     exclude = [g for g in (a.exclude or "").split(",") if g]
-    leaves = find_leaves(include, exclude)
+    leaves = find_leaves(include, exclude, a.discover)
     if a.names_file:
         keep = set(l.strip() for l in read_text(a.names_file).splitlines() if l.strip())
         leaves = [l for l in leaves if l in keep]
     print(f"leaves: {len(leaves)}")
     if len(leaves) < 8: sys.exit("need >=8 leaves to build a tree")
     descs = {l: desc_of(l) for l in leaves}
-    texts = [f"{l.replace('-',' ')}: {descs[l][:150]}" for l in leaves]
+    texts = [f"{l.replace('/',' ').replace('-',' ')}: {descs[l][:150]}" for l in leaves]
     print(f"embedding with {a.model} ...")
     emb = normalize(SentenceTransformer(a.model).encode(texts, batch_size=64, show_progress_bar=False))
 
     GENERIC = set(a.stop.split(",")) if a.stop else set()
-    name_docs = [" ".join(t for t in l.split('-') if len(t) >= 4 and t not in GENERIC) for l in leaves]
+    name_docs = [" ".join(t for t in re.split(r'[-/]', l) if len(t) >= 4 and t not in GENERIC) for l in leaves]
     vec = TfidfVectorizer(token_pattern=r"[a-zA-Z0-9äöüß]{4,}", max_features=4000)
     NM = vec.fit_transform(name_docs); FEAT = np.array(vec.get_feature_names_out())
     def terms_for(idx, n=6):
@@ -136,11 +177,12 @@ def cmd_build(a):
                       "terms": terms_for(idx),
                       "samples": [{"name": leaves[i], "desc": descs[leaves[i]][:120]} for i in idx[:5]],
                       "children": [], "leaves": []}
-        if depth == len(LEVELS) - 1:
+        # small enough to be a leaf-holder directly (splitting it would spawn tiny
+        # 1-2 leaf children). Keeps holders >= min_leaves and nodes >= min_children.
+        if depth == len(LEVELS) - 1 or len(idx) < max(2 * a.min_leaves, a.min_children):
             nodes[nid]["leaves"] = [leaves[i] for i in idx]; return nid
-        k = max(2, min(BRANCH[depth], math.ceil(len(idx) / SIZE[depth]))); k = min(k, len(idx))
-        if k < 2:
-            nodes[nid]["leaves"] = [leaves[i] for i in idx]; return nid
+        k = min(BRANCH[depth], math.ceil(len(idx) / SIZE[depth]))
+        k = max(a.min_children, k); k = min(k, len(idx))
         lab = KMeans(n_clusters=k, n_init=5, random_state=42).fit_predict(emb[idx])
         for c in range(k):
             sub = [idx[i] for i in range(len(idx)) if lab[i] == c]
@@ -151,14 +193,80 @@ def cmd_build(a):
     for c in range(a.wings):
         sub = [i for i in range(len(leaves)) if km0[i] == c]
         if sub: roots.append(split(sub, 0, "ROOT"))
+
+    # ---- rebalance: no 1-child chains, no tiny leaf-holders, >= min_children per node ----
+    lidx = {l: i for i, l in enumerate(leaves)}
+    def nleaves(nid):
+        n = nodes[nid]
+        if n["leaves"]: return n["leaves"]
+        out = []
+        for c in n["children"]: out += nleaves(c)
+        return out
+    def cent(nid):
+        ms = [lidx[l] for l in nleaves(nid) if l in lidx]
+        v = emb[ms].mean(0); return v / (np.linalg.norm(v) + 1e-9)
+    def attach(nid, l):                       # push a leaf down to the most-similar leaf-holder
+        n = nodes[nid]
+        if n["leaves"]: n["leaves"].append(l); return
+        if not n["children"]: n["leaves"].append(l); return
+        best = max(n["children"], key=lambda c: float(cent(c) @ emb[lidx[l]]))
+        attach(best, l)
+    def siblings(nid):
+        p = nodes[nid]["parent"]
+        return roots if p == "ROOT" else nodes[p]["children"]
+    def drop(nid):
+        s = siblings(nid)
+        if nid in s: s.remove(nid)
+        del nodes[nid]
+    def is_holder(nid): return bool(nodes[nid]["leaves"])
+
+    def rebalance_children(clist, owner):       # owner: a node id or "ROOT"
+        changed = True
+        while changed:
+            changed = False
+            for c in list(clist):               # collapse single-child / empty internal children
+                cn = nodes[c]
+                if not cn["leaves"] and len(cn["children"]) == 1:
+                    g = cn["children"][0]; nodes[g]["parent"] = owner
+                    clist[clist.index(c)] = g; del nodes[c]; changed = True
+                elif not cn["leaves"] and not cn["children"]:
+                    clist.remove(c); del nodes[c]; changed = True
+        if len(clist) > 1:                      # dissolve undersized leaf-holders into best sibling
+            for c in list(clist):
+                if is_holder(c) and len(nodes[c]["leaves"]) < a.min_leaves and len(clist) > 1:
+                    sibs = [s for s in clist if s != c]
+                    for l in list(nodes[c]["leaves"]):
+                        attach(max(sibs, key=lambda s: float(cent(s) @ emb[lidx[l]])), l)
+                    drop(c)
+        for c in list(clist):                   # lift internal children that stayed below min_children
+            cn = nodes[c]
+            if not is_holder(c) and 1 < len(cn["children"]) < a.min_children:
+                for g in cn["children"]: nodes[g]["parent"] = owner
+                clist[clist.index(c):clist.index(c)+1] = cn["children"]; del nodes[c]
+
+    def fix(nid):
+        n = nodes[nid]
+        for c in list(n["children"]): fix(c)
+        if not is_holder(nid): rebalance_children(n["children"], nid)
+    for r in list(roots): fix(r)
+    rebalance_children(roots, "ROOT")
+
+    LV = ["wing", "room", "zone", "station"]    # recompute level by depth after restructuring
+    def setlvl(nid, d):
+        nodes[nid]["level"] = LV[min(d, len(LV) - 1)]
+        for c in nodes[nid]["children"]: setlvl(c, d + 1)
+    for r in roots: setlvl(r, 0)
+
     write_json(f"{a.work}/tree.json", {"root_children": roots, "nodes": nodes}, ensure_ascii=False)
     np.save(f"{a.work}/emb.npy", emb)
     write_json(f"{a.work}/leaves.json", leaves)
     from collections import Counter
     lvl = Counter(n["level"] for n in nodes.values())
-    sizes = [len(n["leaves"]) for n in nodes.values() if n["level"] == "station"]
-    print("levels:", dict(lvl), "| stations:", len(sizes),
-          "leaf/station min/med/max:", min(sizes), int(np.median(sizes)), max(sizes))
+    sizes = [len(n["leaves"]) for n in nodes.values() if n["leaves"]]
+    kids = [len(n["children"]) for n in nodes.values() if n["children"]]
+    print("levels:", dict(lvl), "| leaf-holders:", len(sizes),
+          "leaf/holder min/med/max:", min(sizes), int(np.median(sizes)), max(sizes),
+          "| children/node min/med/max:", min(kids), int(np.median(kids)), max(kids))
     print(f"wrote {a.work}/tree.json")
 
 # ---------- emit label batches ----------
@@ -195,13 +303,24 @@ def cmd_render(a):
     PRE = {"wing":"wing","room":"room","zone":"zone","station":"stn"}
     leafset = set(d for d in os.listdir(".") if is_leaf(d) and not d.startswith("_"))
     used = set(leafset); used.add(a.root)
-    dirn = {}
+    dirn = {}                                   # globally-unique basename per node
     for nid, n in nodes.items():
         base = f"{PRE[n['level']]}-{slug(L.get(nid, nid))}"; nm = base; k = 2
         while nm in used: nm = f"{base}-{k}"; k += 1
         used.add(nm); dirn[nid] = nm
     label = lambda i: L.get(i, i)
     hint = lambda i: ", ".join(nodes[i]["terms"][:5]) or "-"
+
+    nested = (a.layout == "nested")
+    pathmemo = {}
+    def npath(nid):                             # on-disk path of a node, relative to skills-dir
+        if not nested: return dirn[nid]         # flat: every node is a top-level sibling
+        if nid in pathmemo: return pathmemo[nid]
+        p = nodes[nid]["parent"]
+        pp = a.root if p == "ROOT" else npath(p)
+        pathmemo[nid] = f"{pp}/{dirn[nid]}"; return pathmemo[nid]
+    def nlink(to_path, from_path):              # relative SKILL.md link between two node dirs
+        return os.path.relpath(to_path, from_path) + "/SKILL.md"
 
     def dedup(cids):
         seen = {}; out = {}
@@ -211,27 +330,32 @@ def cmd_render(a):
             seen[lb] = 1; out[c] = lb
         return out
 
-    def write(name, lvl, title, dsc, branches, leafmode, is_root=False):
-        skills = [{"name": t_, "folder_name": t_, "description_at_merge": ""} for _, _, t_ in branches]
+    def write(nodepath, name, lvl, title, dsc, branches, leafmode, is_root=False, parent_path=None):
+        # branches: list of (display_label, hint, target_path-relative-to-skills-dir)
+        skills = [{"name": os.path.basename(tp), "folder_name": tp, "description_at_merge": ""}
+                  for _, _, tp in branches]
         man = {"router_name": name, "skills_dir": a.skills_dir, "created": now(),
-               "kind": "root" if is_root else lvl, "navigator": True, "root": is_root, "skills": skills}
+               "kind": "root" if is_root else lvl, "navigator": True, "root": is_root,
+               "layout": a.layout, "skills": skills}
         if not a.apply: return
-        os.makedirs(name, exist_ok=True)
-        write_json(f"{name}/_manifest.json", man, ensure_ascii=False, indent=1)
+        os.makedirs(nodepath, exist_ok=True)
+        write_json(f"{nodepath}/_manifest.json", man, ensure_ascii=False, indent=1)
+        brl = [(lb, h, nlink(tp, nodepath)) for lb, h, tp in branches]
         if leafmode:
-            head = T["leaf_head"]; bl = "\n".join(T["leaf_branch"].format(lb=lb, hint=h, t=t_) for lb, h, t_ in branches)
+            head = T["leaf_head"]; bl = "\n".join(T["leaf_branch"].format(lb=lb, hint=h, t=t_) for lb, h, t_ in brl)
         else:
-            head = T["frage"].format(title=title); bl = "\n".join(T["branch"].format(lb=lb, hint=h, t=t_) for lb, h, t_ in branches)
-        avail = ", ".join(f'"{t_}"' for _, _, t_ in branches)
-        # The root is user-invokable/auto-discoverable. Agents reach sub-nodes by reading
-        # ../<name>/SKILL.md during traversal; sub-nodes stay out of the skill list.
+            head = T["frage"].format(title=title); bl = "\n".join(T["branch"].format(lb=lb, hint=h, t=t_) for lb, h, t_ in brl)
+        avail = ", ".join(f'"{os.path.basename(tp)}"' for _, _, tp in branches)
+        up = T["up"].format(p=nlink(parent_path, nodepath)) + "\n\n" if parent_path is not None else ""
+        # Root is user-invokable/auto-discoverable. Sub-nodes are referenced by their
+        # relative SKILL.md link during traversal and stay out of the skill list.
         body = (f"---\nname: {name}\ndescription: >\n  {dsc}\n"
                 f"user-invokable: {'true' if is_root else 'false'}\n"
                 f"args:\n  - name: skill\n    description: >\n      Direct sub-skill to load. Available: {avail}.\n    required: false\n"
                 f"metadata:\n  category: \"router\"\n  kind: \"{'root' if is_root else lvl}\"\n  navigator: \"true\"\n---\n\n"
                 f"# {T['node_title']}: {title}  ({T['level'][lvl]})\n\n{T['routes'].format(n=len(branches))}\n\n"
-                f"{head}\n{bl}\n\n{T['unclear']}\n")
-        write_text(f"{name}/SKILL.md", body)
+                f"{head}\n{bl}\n\n{up}{T['unclear']}\n")
+        write_text(f"{nodepath}/SKILL.md", body)
 
     if a.apply:
         old = [d for d in os.listdir(".") if os.path.isdir(d) and os.path.exists(f"{d}/_manifest.json")
@@ -241,29 +365,30 @@ def cmd_render(a):
 
     nw = 0
     for nid, n in nodes.items():
-        lvl = n["level"]; nm = dirn[nid]; ttl = label(nid)
+        lvl = n["level"]; ttl = label(nid); np_ = npath(nid)
+        pp = a.root if n["parent"] == "ROOT" else npath(n["parent"])
         if n["leaves"]:   # leaf-holder (station, or an intermediate node that bottomed out early)
             br = []
             for l in n["leaves"]:
                 d = desc_of(l)[:110]
-                br.append((l.replace("-", " "), d or "leaf skill", l))
+                br.append((os.path.basename(l).replace("-", " "), d or "leaf skill", l))
             dsc = (f"{T['node_title']} ({T['level'][lvl]}) {ttl}: {len(n['leaves'])} leaf skills.")[:1020]
-            write(nm, lvl, ttl, dsc, br, True)
+            write(np_, dirn[nid], lvl, ttl, dsc, br, True, parent_path=pp)
         else:
             cids = n["children"]; disp = dedup(cids)
-            br = [(disp[c], hint(c), dirn[c]) for c in cids]
+            br = [(disp[c], hint(c), npath(c)) for c in cids]
             dsc = (f"{T['node_title']} ({T['level'][lvl]}) {ttl} -> {', '.join(disp[c] for c in cids)}.")[:1020]
-            write(nm, lvl, ttl, dsc, br, False)
+            write(np_, dirn[nid], lvl, ttl, dsc, br, False, parent_path=pp)
         nw += 1
     # root
     rc = t["root_children"]; disp = dedup(rc)
-    br = [(disp[c], hint(c), dirn[c]) for c in rc]
+    br = [(disp[c], hint(c), npath(c)) for c in rc]
     rdesc = (f"{a.root}: decision-tree entry point. Top areas: {', '.join(disp[c] for c in rc)}. "
              "Answer the question, pick an area, load its SKILL.md, navigate down to the matching leaf skill.")[:1020]
-    write(a.root, "wing", a.title or a.root, rdesc, br, False, is_root=True)
-    namemap = {nid: dirn[nid] for nid in nodes}; namemap["ROOT"] = a.root
+    write(a.root, a.root, "wing", a.title or a.root, rdesc, br, False, is_root=True)
+    namemap = {nid: npath(nid) for nid in nodes}; namemap["ROOT"] = a.root
     write_json(f"{a.work}/names.json", namemap, ensure_ascii=False)
-    print(f"internal nodes: {nw} + root '{a.root}'  (APPLY={a.apply})")
+    print(f"internal nodes: {nw} + root '{a.root}'  (layout={a.layout}, APPLY={a.apply})")
 
 # ---------- relates ----------
 def cmd_relates(a):
@@ -276,7 +401,7 @@ def cmd_relates(a):
     parent = {nid: n["parent"] for nid, n in nodes.items()}
     def members(nid):
         n = nodes[nid]
-        if n["level"] == "station": return n["leaves"]
+        if n["leaves"]: return n["leaves"]
         out = []
         for c in n["children"]: out += members(c)
         return out
@@ -304,7 +429,7 @@ def cmd_relates(a):
             txt = read_text(p)
             txt = re.sub(r"\n## (Verwandte Bereiche|Related areas).*?(?=\n## )", "\n", txt, flags=re.S)
             blk = "\n" + T["relates"] + "\n" + "".join(
-                f"- **{L.get(b,b)}** -> `../{names[b]}/SKILL.md`\n" for b in picks)
+                f"- **{L.get(b,b)}** -> `{os.path.relpath(names[b], names[aid])}/SKILL.md`\n" for b in picks)
             anchor = "## Wenn unklar" if a.lang == "de" else "## If unclear"
             txt = txt.replace(anchor, blk + "\n" + anchor, 1) if anchor in txt else txt.rstrip() + "\n" + blk
             write_text(p, txt); n += 1
@@ -316,12 +441,17 @@ def _man(r):
     return read_json(p) if os.path.exists(p) else None
 def _kids(r):
     m = _man(r); return [s["folder_name"] for s in m["skills"]] if m else []
+def _is_nav(r):
+    # a navigator internal node = a dir carrying a navigator manifest. Anything a
+    # node links that lacks one is a leaf skill (works for nested tree/flat leaves
+    # whose folder has no direct SKILL.md).
+    m = _man(r); return bool(m and m.get("navigator"))
 
 def cmd_walk(a):
     os.chdir(a.skills_dir)
     def rec(nname, d):
-        if is_leaf(nname): print("  " * d + f"- {nname}"); return
-        m = _man(nname); k = (m or {}).get("kind", "root" if nname == a.root else "?")
+        if not _is_nav(nname): print("  " * d + f"- {nname}"); return
+        k = _man(nname).get("kind", "root" if nname == a.root else "?")
         print("  " * d + f"[{k}] {nname}")
         for c in _kids(nname): rec(c, d + 1)
     rec(a.root, 0)
@@ -330,7 +460,7 @@ def cmd_find(a):
     os.chdir(a.skills_dir); term = a.term.lower(); hits = []
     def rec(nname, path):
         path = path + [nname]
-        if is_leaf(nname):
+        if not _is_nav(nname):
             t = read_text(f"{nname}/SKILL.md").lower() if os.path.exists(f"{nname}/SKILL.md") else ""
             if term in nname.lower() or term in t: hits.append(" -> ".join(path))
             return
@@ -341,16 +471,17 @@ def cmd_find(a):
 
 def cmd_stats(a):
     os.chdir(a.skills_dir)
-    cnt = {"wing":0,"room":0,"zone":0,"station":0}; seen = set()
+    cnt = {"wing":0,"room":0,"zone":0,"station":0}; leaves = set(); visited = set()
     def rec(nname):
-        if is_leaf(nname): seen.add(nname); return
-        m = _man(nname); k = (m or {}).get("kind")
+        if not _is_nav(nname): leaves.add(nname); return
+        visited.add(nname)
+        k = _man(nname).get("kind")
         if k in cnt and nname != a.root: cnt[k] += 1
         for c in _kids(nname): rec(c)
     rec(a.root)
-    allleaf = {d for d in os.listdir(".") if is_leaf(d) and not d.startswith("_")}
+    allnav = {d for d in os.listdir(".") if not d.startswith("_") and _is_nav(d)}
     print(f"root={a.root}  wings={cnt['wing']} rooms={cnt['room']} zones={cnt['zone']} "
-          f"stations={cnt['station']} leaves={len(seen)}  unreached={len(allleaf - seen)}")
+          f"stations={cnt['station']} leaves={len(leaves)}  unreached={len(allnav - visited)}")
 
 # ---------- cli ----------
 def main():
@@ -365,12 +496,20 @@ def main():
     b.add_argument("--wings", type=int, default=9)
     b.add_argument("--sizes", default="90,30,7"); b.add_argument("--branch", default="8,8,12")
     b.add_argument("--stop", default="")
+    b.add_argument("--discover", default="top", choices=["top", "tree", "flat"],
+                   help="top: top-level dirs with SKILL.md; tree: each top-level skill-tree = one leaf; flat: every SKILL.md dir at any depth")
+    b.add_argument("--min-children", type=int, default=3,
+                   help="rebalance: collapse 1-child chains and flatten so each internal node has >= this many children")
+    b.add_argument("--min-leaves", type=int, default=3,
+                   help="rebalance: dissolve leaf-holders with fewer leaves into the nearest sibling")
     b.set_defaults(fn=cmd_build)
     e = sub.add_parser("emit"); e.add_argument("--batch-size", type=int, default=40); e.set_defaults(fn=cmd_emit)
     r = sub.add_parser("render"); r.add_argument("--root", default="navigator"); r.add_argument("--title", default="")
-    r.add_argument("--lang", default="de", choices=["de","en"]); r.add_argument("--apply", action="store_true")
+    r.add_argument("--lang", default="en", choices=["de","en"]); r.add_argument("--apply", action="store_true")
+    r.add_argument("--layout", default="flat", choices=["flat","nested"],
+                   help="flat: all nodes as top-level sibling dirs (marketplace-safe, default). nested: nodes mirror the tree on disk under the root dir")
     r.set_defaults(fn=cmd_render)
-    rl = sub.add_parser("relates"); rl.add_argument("--lang", default="de", choices=["de","en"]); rl.set_defaults(fn=cmd_relates)
+    rl = sub.add_parser("relates"); rl.add_argument("--lang", default="en", choices=["de","en"]); rl.set_defaults(fn=cmd_relates)
     w = sub.add_parser("walk"); w.add_argument("--root", default="navigator"); w.set_defaults(fn=cmd_walk)
     f = sub.add_parser("find"); f.add_argument("term"); f.add_argument("--root", default="navigator"); f.set_defaults(fn=cmd_find)
     s = sub.add_parser("stats"); s.add_argument("--root", default="navigator"); s.set_defaults(fn=cmd_stats)

@@ -1,0 +1,16 @@
+{
+ "router_name": "wing-pruefer-abgleich",
+ "skills_dir": ".",
+ "created": "2026-06-14T15:50:39.664516+00:00",
+ "kind": "wing",
+ "navigator": true,
+ "root": false,
+ "layout": "nested",
+ "skills": [
+  {
+   "name": "room-abgleich-gebrauchsmusterrecht-strafzumessung",
+   "folder_name": "recht-navigator/wing-pruefer-abgleich/room-abgleich-gebrauchsmusterrecht-strafzumessung",
+   "description_at_merge": ""
+  }
+ ]
+}

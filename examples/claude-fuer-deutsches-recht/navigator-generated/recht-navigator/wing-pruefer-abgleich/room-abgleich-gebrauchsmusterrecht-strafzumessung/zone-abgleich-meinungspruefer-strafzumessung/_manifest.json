@@ -1,0 +1,71 @@
+{
+ "router_name": "zone-abgleich-meinungspruefer-strafzumessung",
+ "skills_dir": ".",
+ "created": "2026-06-14T15:50:39.681819+00:00",
+ "kind": "zone",
+ "navigator": true,
+ "root": false,
+ "layout": "nested",
+ "skills": [
+  {
+   "name": "fahrgastrechte",
+   "folder_name": "fahrgastrechte",
+   "description_at_merge": ""
+  },
+  {
+   "name": "handelsrecht-hgb",
+   "folder_name": "handelsrecht-hgb",
+   "description_at_merge": ""
+  },
+  {
+   "name": "jurastudium",
+   "folder_name": "jurastudium",
+   "description_at_merge": ""
+  },
+  {
+   "name": "meinungspruefer",
+   "folder_name": "meinungspruefer",
+   "description_at_merge": ""
+  },
+  {
+   "name": "nda-abgleich",
+   "folder_name": "nda-abgleich",
+   "description_at_merge": ""
+  },
+  {
+   "name": "notariat-alltag",
+   "folder_name": "notariat-alltag",
+   "description_at_merge": ""
+  },
+  {
+   "name": "strafzumessung",
+   "folder_name": "strafzumessung",
+   "description_at_merge": ""
+  },
+  {
+   "name": "umweltschutzverband-verbandsklage",
+   "folder_name": "umweltschutzverband-verbandsklage",
+   "description_at_merge": ""
+  },
+  {
+   "name": "us-bankruptcy-code",
+   "folder_name": "us-bankruptcy-code",
+   "description_at_merge": ""
+  },
+  {
+   "name": "verlagsredaktion",
+   "folder_name": "verlagsredaktion",
+   "description_at_merge": ""
+  },
+  {
+   "name": "gebrauchsmusterrecht",
+   "folder_name": "gebrauchsmusterrecht",
+   "description_at_merge": ""
+  },
+  {
+   "name": "fortbestehensprognose",
+   "folder_name": "fortbestehensprognose",
+   "description_at_merge": ""
+  }
+ ]
+}

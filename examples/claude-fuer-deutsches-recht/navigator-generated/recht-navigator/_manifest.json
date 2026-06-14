@@ -1,0 +1,16 @@
+{
+ "router_name": "recht-navigator",
+ "skills_dir": ".",
+ "created": "2026-06-14T15:50:39.946787+00:00",
+ "kind": "root",
+ "navigator": true,
+ "root": true,
+ "layout": "nested",
+ "skills": [
+  {
+   "name": "wing-pruefer-abgleich",
+   "folder_name": "recht-navigator/wing-pruefer-abgleich",
+   "description_at_merge": ""
+  }
+ ]
+}

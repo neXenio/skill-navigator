@@ -13,3 +13,6 @@ venv/
 .skillnav/
 dist/
 build/
+
+# large full-resort export (regenerate with DISCOVER=flat build.sh)
+examples/*/navigator-generated-flat/
