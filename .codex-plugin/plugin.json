@@ -1,0 +1,38 @@
+{
+  "name": "skill-navigator",
+  "version": "0.1.0",
+  "description": "Build decision-tree navigators for SKILL.md-based skill directories.",
+  "author": {
+    "name": "neXenio GmbH",
+    "url": "https://github.com/neXenio"
+  },
+  "homepage": "https://github.com/neXenio/skill-navigator",
+  "repository": "https://github.com/neXenio/skill-navigator",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "navigation",
+    "router",
+    "decision-tree",
+    "clustering"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Skill Navigator",
+    "shortDescription": "Build navigable skill decision trees",
+    "longDescription": "Create a root navigator skill over a large SKILL.md-based skill directory, with generated decision nodes and verification commands.",
+    "developerName": "neXenio GmbH",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Write"
+    ],
+    "websiteURL": "https://github.com/neXenio/skill-navigator",
+    "privacyPolicyURL": "https://github.com/neXenio/skill-navigator/blob/main/README.md",
+    "termsOfServiceURL": "https://github.com/neXenio/skill-navigator/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Build a navigator over this skills directory"
+    ],
+    "screenshots": [],
+    "brandColor": "#2563EB"
+  }
+}

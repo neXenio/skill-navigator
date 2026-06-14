@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "skill-navigator",
+  "version": "0.1.0",
+  "description": "Build decision-tree navigators for SKILL.md-based skill directories.",
+  "owner": {
+    "name": "neXenio GmbH",
+    "url": "https://github.com/neXenio"
+  },
+  "plugins": [
+    {
+      "name": "skill-navigator",
+      "description": "Build a root navigator skill over a large SKILL.md-based skill directory.",
+      "source": "./",
+      "category": "development",
+      "homepage": "https://github.com/neXenio/skill-navigator"
+    }
+  ]
+}

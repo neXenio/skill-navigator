@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local agent/tool state
+.code-review-graph/
+.omc/
+
+# Build scratch directories
+.skillnav/
+dist/
+build/

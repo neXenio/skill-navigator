@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skill-navigator"
+version = "0.1.0"
+description = "Build decision-tree navigators for SKILL.md-based skill directories."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "neXenio GmbH" }
+]
+keywords = ["skills", "navigation", "router", "decision-tree", "clustering"]
+dependencies = [
+  "numpy",
+  "scikit-learn",
+  "sentence-transformers"
+]
+
+[project.urls]
+Homepage = "https://github.com/neXenio/skill-navigator"
+Repository = "https://github.com/neXenio/skill-navigator"
+Issues = "https://github.com/neXenio/skill-navigator/issues"
+
+[project.scripts]
+skillnav = "skillnav:main"
+
+[tool.setuptools]
+py-modules = ["skillnav"]
+package-dir = {"" = "scripts"}

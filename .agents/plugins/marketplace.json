@@ -1,0 +1,20 @@
+{
+  "name": "skill-navigator",
+  "interface": {
+    "displayName": "Skill Navigator"
+  },
+  "plugins": [
+    {
+      "name": "skill-navigator",
+      "source": {
+        "source": "local",
+        "path": "./plugins/skill-navigator"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Engineering"
+    }
+  ]
+}
